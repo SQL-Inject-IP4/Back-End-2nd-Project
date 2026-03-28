@@ -32,9 +32,11 @@ export function verifyAuthToken(token: string): AuthTokenPayload | null {
 }
 
 export function getAuthCookieOptions() {
+  const sameSite: "lax" | "none" = env.NODE_ENV === "production" ? "none" : "lax";
+
   return {
     httpOnly: true,
-    sameSite: (env.NODE_ENV === "production" ? "none" : "lax") as const,
+    sameSite,
     secure: env.NODE_ENV === "production",
     path: "/",
     maxAge: AUTH_COOKIE_MAX_AGE_MS

@@ -9,9 +9,17 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_CALLBACK_URL: z.string().url(),
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
+  FRONTEND_URLS: z.string().default(""),
   FRONTEND_LOGIN_SUCCESS_URL: z.string().url().default("http://localhost:5173/"),
   FRONTEND_LOGIN_FAILURE_URL: z.string().url().default("http://localhost:5173/login-failed"),
   JWT_SECRET: z.string().min(32)
 });
 
-export const env = envSchema.parse(process.env);
+const parsedEnv = envSchema.parse(process.env);
+
+export const env = {
+  ...parsedEnv,
+  FRONTEND_URLS: parsedEnv.FRONTEND_URLS.split(",")
+    .map((url) => url.trim())
+    .filter(Boolean)
+};

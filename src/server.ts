@@ -8,6 +8,20 @@ import { authRouter } from "./routes/auth";
 import { styleRouter } from "./routes/style";
 
 const app = express();
+const allowedOrigins = new Set(
+  [env.FRONTEND_URL, ...env.FRONTEND_URLS]
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean)
+);
+
+function normalizeOrigin(origin: string) {
+  try {
+    const url = new URL(origin);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return origin.replace(/\/+$/, "");
+  }
+}
 
 if (env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
@@ -16,7 +30,14 @@ if (env.NODE_ENV === "production") {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || origin === env.FRONTEND_URL) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = normalizeOrigin(origin);
+
+      if (allowedOrigins.has(normalizedOrigin)) {
         callback(null, true);
         return;
       }
