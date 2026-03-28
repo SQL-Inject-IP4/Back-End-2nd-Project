@@ -34,7 +34,7 @@ const styleSelection = {
 
 export const styleRouter = Router();
 
-styleRouter.get("/", requireAuth, async (_req, res, next) => {
+styleRouter.get("/", async (_req, res, next) => {
   try {
     const style = await prisma.styleSetting.upsert({
       where: { id: "global" },

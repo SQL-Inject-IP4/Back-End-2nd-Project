@@ -16,7 +16,7 @@ Backend terpisah untuk:
 - `GET /api/style`
 - `PATCH /api/style`
 
-`GET /api/style` hanya bisa dipanggil oleh user yang sudah login.
+`GET /api/style` bisa dipanggil semua user untuk membaca style global website.
 `PATCH /api/style` hanya bisa dipanggil oleh user yang sudah login lewat Google OAuth.
 
 ## Setup
