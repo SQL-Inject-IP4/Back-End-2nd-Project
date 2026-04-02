@@ -3,7 +3,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { env } from "../config/env";
 import type { User } from "../generated/prisma/client";
-import { AUTH_COOKIE_NAME, getAuthCookieOptions, resolveUserRole, signAuthToken } from "../lib/auth";
+import { AUTH_COOKIE_NAME, getAuthCookieOptions, signAuthToken } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 passport.use(
@@ -22,20 +22,31 @@ passport.use(
           return;
         }
 
+        const allowedAccount = await prisma.allowedGoogleAccount.findUnique({
+          where: { email: primaryEmail }
+        });
+
+        if (!allowedAccount || !allowedAccount.isActive) {
+          done(null, false, {
+            message: "This Google account is not registered"
+          });
+          return;
+        }
+
         const user = await prisma.user.upsert({
           where: { email: primaryEmail },
           update: {
             googleId: profile.id,
             name: profile.displayName || primaryEmail,
             avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: resolveUserRole(primaryEmail)
+            role: allowedAccount.role
           },
           create: {
             email: primaryEmail,
             googleId: profile.id,
             name: profile.displayName || primaryEmail,
             avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: resolveUserRole(primaryEmail)
+            role: allowedAccount.role
           }
         });
 
@@ -59,22 +70,31 @@ authRouter.get(
 
 authRouter.get(
   "/google/callback",
-  passport.authenticate("google", {
-    session: false,
-    failureRedirect: env.FRONTEND_LOGIN_FAILURE_URL
-  }),
-  (req, res) => {
-    const user = req.user as User;
+  (req, res, next) => {
+    passport.authenticate("google", { session: false }, (error: unknown, user: User | false, info?: { message?: string }) => {
+      if (error) {
+        next(error);
+        return;
+      }
 
-    const token = signAuthToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name
-    });
+      if (!user) {
+        const reason = info?.message === "This Google account is not registered"
+          ? "unregistered_account"
+          : "oauth_failed";
+        res.redirect(`${env.FRONTEND_LOGIN_FAILURE_URL}?error=${encodeURIComponent(reason)}`);
+        return;
+      }
 
-    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
-    res.redirect(env.FRONTEND_LOGIN_SUCCESS_URL);
+      const token = signAuthToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name
+      });
+
+      res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+      res.redirect(env.FRONTEND_LOGIN_SUCCESS_URL);
+    })(req, res, next);
   }
 );
 

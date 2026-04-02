@@ -12,11 +12,6 @@ export type AuthTokenPayload = {
   name: string | null;
 };
 
-export function resolveUserRole(email: string): UserRole {
-  void email;
-  return "EDITOR";
-}
-
 export function signAuthToken(payload: AuthTokenPayload): string {
   return jwt.sign(payload, env.JWT_SECRET, {
     expiresIn: "7d"

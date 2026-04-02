@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middleware/authenticate";
+import { requireEditor } from "../middleware/authenticate";
 import { prisma } from "../lib/prisma";
 
 const rgbColorPattern =
@@ -53,7 +53,7 @@ styleRouter.get("/", async (_req, res, next) => {
   }
 });
 
-styleRouter.patch("/", requireAuth, async (req, res, next) => {
+styleRouter.patch("/", requireEditor, async (req, res, next) => {
   try {
     const parsedBody = updateStyleSchema.safeParse(req.body);
 
