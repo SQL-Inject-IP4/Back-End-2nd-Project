@@ -13,13 +13,21 @@ const envSchema = z.object({
   FRONTEND_URLS: z.string().default(""),
   FRONTEND_LOGIN_SUCCESS_URL: z.string().url().default("http://localhost:5173/"),
   FRONTEND_LOGIN_FAILURE_URL: z.string().url().default("http://localhost:5173/"),
-  JWT_SECRET: z.string().min(32)
+  BETTER_AUTH_SECRET: z.string().min(32).optional(),
+  JWT_SECRET: z.string().min(32).optional()
 });
 
 const parsedEnv = envSchema.parse(process.env);
+const authSecret = parsedEnv.BETTER_AUTH_SECRET ?? parsedEnv.JWT_SECRET;
+
+if (!authSecret) {
+  throw new Error("BETTER_AUTH_SECRET or JWT_SECRET must be set with at least 32 characters");
+}
 
 export const env = {
   ...parsedEnv,
+  AUTH_SECRET: authSecret,
+  BACKEND_ORIGIN: new URL(parsedEnv.GOOGLE_CALLBACK_URL).origin,
   REGISTERED_GOOGLE_ACCOUNTS: parsedEnv.REGISTERED_GOOGLE_ACCOUNTS.split(",")
     .map((entry) => entry.trim())
     .filter(Boolean),

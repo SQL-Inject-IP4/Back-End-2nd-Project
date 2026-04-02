@@ -2,9 +2,9 @@ generator client {
   provider                = "prisma-client"
   output                  = "../src/generated/prisma"
   engineType              = "client"
-  moduleFormat            = "cjs"
+  moduleFormat            = "esm"
   generatedFileExtension  = "ts"
-  importFileExtension     = ""
+  importFileExtension     = "js"
 }
 
 datasource db {
@@ -17,15 +17,58 @@ enum UserRole {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  name         String?
-  avatarUrl    String?
-  googleId     String         @unique
-  role         UserRole       @default(VIEWER)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  styleUpdates StyleSetting[] @relation("StyleUpdatedBy")
+  id            String         @id @default(cuid())
+  email         String         @unique
+  emailVerified Boolean        @default(false)
+  name          String
+  image         String?        @map("avatarUrl")
+  googleId      String?        @unique
+  role          UserRole       @default(VIEWER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  styleUpdates  StyleSetting[] @relation("StyleUpdatedBy")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model AllowedGoogleAccount {

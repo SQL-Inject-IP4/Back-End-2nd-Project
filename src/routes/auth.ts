@@ -1,108 +1,67 @@
 import { Router } from "express";
-import passport from "passport";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { env } from "../config/env";
-import type { User, UserRole } from "../generated/prisma/client";
-import { AUTH_COOKIE_NAME, getAuthCookieOptions, signAuthToken } from "../lib/auth";
-import { prisma } from "../lib/prisma";
-
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
-      callbackURL: env.GOOGLE_CALLBACK_URL
-    },
-    async (_accessToken, _refreshToken, profile, done) => {
-      try {
-        const primaryEmail = profile.emails?.[0]?.value?.trim().toLowerCase();
-
-        if (!primaryEmail) {
-          done(new Error("Google account does not expose an email address"));
-          return;
-        }
-
-        const allowedAccount = await prisma.allowedGoogleAccount.findUnique({
-          where: { email: primaryEmail }
-        });
-
-        const resolvedRole: UserRole =
-          allowedAccount && allowedAccount.isActive
-            ? allowedAccount.role
-            : "VIEWER";
-
-        const user = await prisma.user.upsert({
-          where: { email: primaryEmail },
-          update: {
-            googleId: profile.id,
-            name: profile.displayName || primaryEmail,
-            avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: resolvedRole
-          },
-          create: {
-            email: primaryEmail,
-            googleId: profile.id,
-            name: profile.displayName || primaryEmail,
-            avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: resolvedRole
-          }
-        });
-
-        done(null, user);
-      } catch (error) {
-        done(error as Error);
-      }
-    }
-  )
-);
+import { env } from "../config/env.js";
+import { applyBetterAuthHeaders, auth, getRequestHeaders, getSessionFromRequest, sendBetterAuthResponse } from "../lib/better-auth.js";
+import { prisma } from "../lib/prisma.js";
+import { syncUserRole } from "../lib/rbac.js";
+import { createRateLimit } from "../middleware/security.js";
 
 export const authRouter = Router();
-
-authRouter.get(
-  "/google",
-  passport.authenticate("google", {
-    scope: ["profile", "email"],
-    prompt: "select_account",
-    session: false
-  })
-);
-
-authRouter.get(
-  "/google/callback",
-  (req, res, next) => {
-    passport.authenticate("google", { session: false }, (error: unknown, user: User | false, info?: { message?: string }) => {
-      if (error) {
-        next(error);
-        return;
-      }
-
-      if (!user) {
-        const reason = "oauth_failed";
-        const failureUrl = new URL(env.FRONTEND_LOGIN_FAILURE_URL);
-        failureUrl.searchParams.set("error", reason);
-        res.redirect(failureUrl.toString());
-        return;
-      }
-
-      const token = signAuthToken({
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-        name: user.name
-      });
-
-      res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
-      res.redirect(env.FRONTEND_LOGIN_SUCCESS_URL);
-    })(req, res, next);
-  }
-);
-
-authRouter.post("/logout", (_req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
-  res.status(204).send();
+const authFlowRateLimit = createRateLimit({
+  key: "auth-flow",
+  windowMs: 60_000,
+  maxRequests: 20
+});
+const authReadRateLimit = createRateLimit({
+  key: "auth-read",
+  windowMs: 60_000,
+  maxRequests: 120
 });
 
-authRouter.get("/me", async (req, res, next) => {
+authRouter.get("/google", authFlowRateLimit, async (req, res, next) => {
+  try {
+    const headers = getRequestHeaders(req);
+
+    if (!headers.has("origin")) {
+      headers.set("origin", env.BACKEND_ORIGIN);
+    }
+
+    const response = await auth.api.signInSocial({
+      headers,
+      body: {
+        provider: "google",
+        callbackURL: env.FRONTEND_LOGIN_SUCCESS_URL,
+        errorCallbackURL: env.FRONTEND_LOGIN_FAILURE_URL
+      },
+      asResponse: true
+    });
+    const redirectLocation = response.headers.get("location");
+
+    if (!response.ok || !redirectLocation) {
+      await sendBetterAuthResponse(response, res);
+      return;
+    }
+
+    applyBetterAuthHeaders(response, res, { includeRegularHeaders: false });
+    res.redirect(302, redirectLocation);
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post("/logout", authFlowRateLimit, async (req, res, next) => {
+  try {
+    const response = await auth.api.signOut({
+      headers: getRequestHeaders(req),
+      asResponse: true
+    });
+
+    await sendBetterAuthResponse(response, res);
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.get("/me", authReadRateLimit, async (req, res, next) => {
   try {
     if (!req.authUser) {
       res.json({
@@ -118,15 +77,12 @@ authRouter.get("/me", async (req, res, next) => {
         id: true,
         email: true,
         name: true,
-        avatarUrl: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true
+        image: true,
+        role: true
       }
     });
 
     if (!user) {
-      res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
       res.json({
         authenticated: false,
         user: null
@@ -134,9 +90,17 @@ authRouter.get("/me", async (req, res, next) => {
       return;
     }
 
+    const resolvedRole = await syncUserRole(user.id, user.email);
+
     res.json({
       authenticated: true,
-      user
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name ?? null,
+        avatarUrl: user.image ?? null,
+        role: resolvedRole
+      }
     });
   } catch (error) {
     next(error);

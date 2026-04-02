@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireEditor } from "../middleware/authenticate";
-import { prisma } from "../lib/prisma";
+import { requireEditor } from "../middleware/authenticate.js";
+import { createRateLimit } from "../middleware/security.js";
+import { prisma } from "../lib/prisma.js";
 
 const rgbColorPattern =
   /^rgb\(\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*,\s*(25[0-5]|2[0-4]\d|1?\d?\d)\s*\)$/;
@@ -25,7 +26,6 @@ const styleSelection = {
   updatedBy: {
     select: {
       id: true,
-      email: true,
       name: true,
       role: true
     }
@@ -33,8 +33,18 @@ const styleSelection = {
 } as const;
 
 export const styleRouter = Router();
+const styleReadRateLimit = createRateLimit({
+  key: "style-read",
+  windowMs: 60_000,
+  maxRequests: 180
+});
+const styleWriteRateLimit = createRateLimit({
+  key: "style-write",
+  windowMs: 60_000,
+  maxRequests: 20
+});
 
-styleRouter.get("/", async (_req, res, next) => {
+styleRouter.get("/", styleReadRateLimit, async (_req, res, next) => {
   try {
     const style = await prisma.styleSetting.upsert({
       where: { id: "global" },
@@ -53,7 +63,7 @@ styleRouter.get("/", async (_req, res, next) => {
   }
 });
 
-styleRouter.patch("/", requireEditor, async (req, res, next) => {
+styleRouter.patch("/", styleWriteRateLimit, requireEditor, async (req, res, next) => {
   try {
     const parsedBody = updateStyleSchema.safeParse(req.body);
 

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, type UserRole } from "../src/generated/prisma/client";
+import { PrismaClient } from "../src/generated/prisma/client.js";
+import type { UserRole } from "../src/generated/prisma/enums.js";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL!
