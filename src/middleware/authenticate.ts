@@ -46,18 +46,16 @@ export async function attachAuthUser(req: Request, res: Response, next: NextFunc
       }
     });
 
-    if (!allowedAccount || !allowedAccount.isActive) {
-      res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
-      req.authUser = null;
-      next();
-      return;
-    }
+    const resolvedRole =
+      allowedAccount && allowedAccount.isActive
+        ? allowedAccount.role
+        : "VIEWER";
 
-    if (user.role !== allowedAccount.role) {
+    if (user.role !== resolvedRole) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          role: allowedAccount.role
+          role: resolvedRole
         }
       });
     }
@@ -66,7 +64,7 @@ export async function attachAuthUser(req: Request, res: Response, next: NextFunc
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: allowedAccount.role
+      role: resolvedRole
     };
     next();
   } catch (error) {

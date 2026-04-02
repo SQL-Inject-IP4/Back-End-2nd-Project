@@ -2,7 +2,7 @@ import { Router } from "express";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { env } from "../config/env";
-import type { User } from "../generated/prisma/client";
+import type { User, UserRole } from "../generated/prisma/client";
 import { AUTH_COOKIE_NAME, getAuthCookieOptions, signAuthToken } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
@@ -26,12 +26,10 @@ passport.use(
           where: { email: primaryEmail }
         });
 
-        if (!allowedAccount || !allowedAccount.isActive) {
-          done(null, false, {
-            message: "This Google account is not registered"
-          });
-          return;
-        }
+        const resolvedRole: UserRole =
+          allowedAccount && allowedAccount.isActive
+            ? allowedAccount.role
+            : "VIEWER";
 
         const user = await prisma.user.upsert({
           where: { email: primaryEmail },
@@ -39,14 +37,14 @@ passport.use(
             googleId: profile.id,
             name: profile.displayName || primaryEmail,
             avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: allowedAccount.role
+            role: resolvedRole
           },
           create: {
             email: primaryEmail,
             googleId: profile.id,
             name: profile.displayName || primaryEmail,
             avatarUrl: profile.photos?.[0]?.value ?? null,
-            role: allowedAccount.role
+            role: resolvedRole
           }
         });
 
@@ -64,6 +62,7 @@ authRouter.get(
   "/google",
   passport.authenticate("google", {
     scope: ["profile", "email"],
+    prompt: "select_account",
     session: false
   })
 );
@@ -78,10 +77,10 @@ authRouter.get(
       }
 
       if (!user) {
-        const reason = info?.message === "This Google account is not registered"
-          ? "unregistered_account"
-          : "oauth_failed";
-        res.redirect(`${env.FRONTEND_LOGIN_FAILURE_URL}?error=${encodeURIComponent(reason)}`);
+        const reason = "oauth_failed";
+        const failureUrl = new URL(env.FRONTEND_LOGIN_FAILURE_URL);
+        failureUrl.searchParams.set("error", reason);
+        res.redirect(failureUrl.toString());
         return;
       }
 

@@ -12,7 +12,7 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default("http://localhost:5173"),
   FRONTEND_URLS: z.string().default(""),
   FRONTEND_LOGIN_SUCCESS_URL: z.string().url().default("http://localhost:5173/"),
-  FRONTEND_LOGIN_FAILURE_URL: z.string().url().default("http://localhost:5173/login-failed"),
+  FRONTEND_LOGIN_FAILURE_URL: z.string().url().default("http://localhost:5173/"),
   JWT_SECRET: z.string().min(32)
 });
 
