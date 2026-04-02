@@ -4,12 +4,17 @@ import express from "express";
 import { env } from "./config/env.js";
 import { betterAuthHandler } from "./lib/better-auth.js";
 import { attachAuthUser } from "./middleware/authenticate.js";
-import { setSecurityHeaders } from "./middleware/security.js";
+import { createRateLimit, setSecurityHeaders } from "./middleware/security.js";
 import { authRouter } from "./routes/auth.js";
 import { styleRouter } from "./routes/style.js";
 
 const app = express();
 app.disable("x-powered-by");
+const internalAuthRateLimit = createRateLimit({
+  key: "internal-auth",
+  windowMs: 60_000,
+  maxRequests: 60
+});
 const allowedOrigins = new Set(
   [env.FRONTEND_URL, ...env.FRONTEND_URLS]
     .map((origin) => normalizeOrigin(origin))
@@ -50,7 +55,7 @@ app.use(
   })
 );
 app.use(setSecurityHeaders);
-app.all(/^\/api\/auth(?:\/.*)?$/, (req, res) => betterAuthHandler(req, res));
+app.all(/^\/api\/auth(?:\/.*)?$/, internalAuthRateLimit, (req, res) => betterAuthHandler(req, res));
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
 app.use(attachAuthUser);
