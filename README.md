@@ -5,6 +5,7 @@ Backend project ini menangani authentication, authorization, session, dan penyim
 ## Tanggung Jawab Backend
 
 Backend bertanggung jawab untuk:
+
 - menjalankan login Google OAuth
 - membuat dan memvalidasi session user
 - menentukan role `EDITOR` atau `VIEWER`
@@ -26,9 +27,11 @@ Backend bertanggung jawab untuk:
 ## Mekanisme Auth dan RBAC
 
 ### Authentication
+
 Login menggunakan Google OAuth melalui Better Auth.
 
 Alur singkat:
+
 1. frontend memanggil `GET /auth/google`
 2. backend mengarahkan user ke Google
 3. Google mengembalikan user ke callback Better Auth
@@ -36,11 +39,14 @@ Alur singkat:
 5. frontend memanggil `GET /auth/me` untuk mengambil user aktif
 
 ### Authorization
+
 Backend menggunakan RBAC sederhana:
+
 - `EDITOR`
 - `VIEWER`
 
 Aturannya:
+
 - semua akun Google bisa login
 - hanya akun editor yang didaftarkan pada `REGISTERED_GOOGLE_ACCOUNTS` yang menjadi `EDITOR`
 - akun Google lain tetap bisa login, tetapi otomatis menjadi `VIEWER`
@@ -50,22 +56,27 @@ Enforcement dilakukan di backend, terutama pada endpoint `PATCH /api/style`.
 ## Endpoint Utama
 
 ### Health
+
 - `GET /health`
 
 ### Auth
+
 - `GET /auth/google`
 - `GET /auth/me`
 - `POST /auth/logout`
 
 ### Better Auth internal
+
 - mounted di `/api/auth/*`
 - callback Google aktif di `/api/auth/callback/google`
 
 ### Style
+
 - `GET /api/style`
 - `PATCH /api/style`
 
 Aturan akses:
+
 - `GET /api/style` bersifat publik
 - `PATCH /api/style` hanya untuk user dengan role `EDITOR`
 
@@ -73,29 +84,30 @@ Aturan akses:
 
 ```text
 Backend/
-├── prisma/
-│   ├── migrations/
-│   ├── schema.prisma
-│   └── seed.ts
-└── src/
-    ├── config/
-    │   └── env.ts
-    ├── lib/
-    │   ├── better-auth.ts
-    │   ├── prisma.ts
-    │   └── rbac.ts
-    ├── middleware/
-    │   ├── authenticate.ts
-    │   └── security.ts
-    ├── routes/
-    │   ├── auth.ts
-    │   └── style.ts
-    └── server.ts
+|-- prisma/
+|   |-- migrations/
+|   |-- schema.prisma
+|   `-- seed.ts
+`-- src/
+    |-- config/
+    |   `-- env.ts
+    |-- lib/
+    |   |-- better-auth.ts
+    |   |-- prisma.ts
+    |   `-- rbac.ts
+    |-- middleware/
+    |   |-- authenticate.ts
+    |   `-- security.ts
+    |-- routes/
+    |   |-- auth.ts
+    |   `-- style.ts
+    `-- server.ts
 ```
 
 ## Model Database
 
 Model utama di Prisma:
+
 - `User`
 - `Session`
 - `Account`
@@ -104,6 +116,7 @@ Model utama di Prisma:
 - `StyleSetting`
 
 Fungsi model:
+
 - `User`: menyimpan identitas user dan role
 - `Session`: menyimpan session Better Auth
 - `Account`: relasi user dengan akun provider Google
@@ -115,22 +128,23 @@ Fungsi model:
 
 Isi `.env` berdasarkan `.env.example`.
 
-Variable penting:
-- `PORT`
-- `NODE_ENV`
-- `DATABASE_URL`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_CALLBACK_URL`
-- `FRONTEND_URL`
-- `FRONTEND_URLS`
-- `FRONTEND_LOGIN_SUCCESS_URL`
-- `FRONTEND_LOGIN_FAILURE_URL`
-- `AUTH_USE_FRONTEND_PROXY`
-- `BETTER_AUTH_SECRET`
-- `REGISTERED_GOOGLE_ACCOUNTS`
+| Variable                     | Fungsi                                                         |
+| ---------------------------- | -------------------------------------------------------------- |
+| `PORT`                       | Port server Express                                            |
+| `NODE_ENV`                   | Mode runtime aplikasi                                          |
+| `DATABASE_URL`               | Koneksi PostgreSQL untuk Prisma                                |
+| `GOOGLE_CLIENT_ID`           | Client ID Google OAuth                                         |
+| `GOOGLE_CLIENT_SECRET`       | Client secret Google OAuth                                     |
+| `GOOGLE_CALLBACK_URL`        | Callback URL yang dipakai Better Auth                          |
+| `FRONTEND_URL`               | Origin frontend utama                                          |
+| `FRONTEND_URLS`              | Daftar origin frontend tambahan untuk CORS dan trusted origins |
+| `FRONTEND_LOGIN_SUCCESS_URL` | URL redirect setelah login berhasil                            |
+| `FRONTEND_LOGIN_FAILURE_URL` | URL redirect setelah login gagal                               |
+| `AUTH_USE_FRONTEND_PROXY`    | Menentukan apakah flow auth memakai proxy frontend             |
+| `BETTER_AUTH_SECRET`         | Secret utama Better Auth                                       |
+| `REGISTERED_GOOGLE_ACCOUNTS` | Daftar akun editor yang diizinkan                              |
 
-Contoh callback lokal yang aktif sekarang:
+Contoh callback lokal:
 
 ```env
 GOOGLE_CALLBACK_URL="http://localhost:4000/api/auth/callback/google"
@@ -143,48 +157,57 @@ REGISTERED_GOOGLE_ACCOUNTS="email1@gmail.com:EDITOR,email2@gmail.com:EDITOR"
 ```
 
 Catatan:
+
 - akun editor harus didaftarkan di environment
 - akun viewer tidak perlu didaftarkan
 - akun Google yang tidak ada di daftar tetap bisa login, tetapi otomatis menjadi `VIEWER`
 
 ## Mode Integrasi Frontend
 
-Backend ini mendukung dua pola integrasi dengan frontend:
+Backend ini mendukung dua pola integrasi dengan frontend.
 
-### 1. Direct backend
-Mode ini dipakai untuk:
+| Mode                        | Digunakan untuk                         | Cara frontend mengakses backend                                                                     | Callback Google                                              | `AUTH_USE_FRONTEND_PROXY` |
+| --------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------- |
+| Direct backend              | Lokal dan deployment umum               | Frontend memanggil backend langsung                                                                 | Mengarah ke domain backend                                   | `false`                   |
+| Frontend proxy untuk Vercel | Frontend dan backend terpisah di Vercel | Browser mengakses route auth/style lewat domain frontend, lalu Vercel rewrite meneruskan ke backend | Mengarah ke domain frontend pada `/api/auth/callback/google` | `true`                    |
+
+### Konfigurasi Direct Backend
+
+Pakai mode ini untuk:
+
 - development lokal
-- deployment umum selain Vercel proxy flow
+- deployment umum
 
-Karakteristiknya:
-- frontend memanggil backend langsung
-- callback Google mengarah ke domain backend
-- `VITE_BACKEND_URL` di frontend diisi URL backend
-- `AUTH_USE_FRONTEND_PROXY` diset `false`
+Aturannya:
 
-Contoh lokal:
+- frontend mengisi `VITE_BACKEND_URL` ke URL backend
+- `GOOGLE_CALLBACK_URL` mengarah ke backend
+- `FRONTEND_LOGIN_SUCCESS_URL` dan `FRONTEND_LOGIN_FAILURE_URL` tetap mengarah ke frontend
+
+Contoh:
 
 ```env
+FRONTEND_URL="http://localhost:5173"
+FRONTEND_LOGIN_SUCCESS_URL="http://localhost:5173/"
+FRONTEND_LOGIN_FAILURE_URL="http://localhost:5173/"
 GOOGLE_CALLBACK_URL="http://localhost:4000/api/auth/callback/google"
 AUTH_USE_FRONTEND_PROXY="false"
 ```
 
-### 2. Frontend proxy untuk Vercel
-Mode ini dipakai khusus saat frontend dan backend dideploy terpisah di Vercel, tetapi auth ingin tetap diakses melalui domain frontend.
+### Konfigurasi Frontend Proxy untuk Vercel
 
-Karakteristiknya:
-- browser mengakses auth dan style melalui domain frontend
-- frontend meneruskan request tertentu ke backend dengan rewrite Vercel
-- callback Google mengarah ke domain frontend pada path `/api/auth/callback/google`
-- backend tetap menjadi server auth dan data utama
-- `AUTH_USE_FRONTEND_PROXY` diset `true`
+Pakai mode ini saat:
+
+- frontend dan backend berada di project atau repository berbeda dan keduanya dideploy terpisah di Vercel
+- frontend menjadi entry point untuk auth flow
 
 Route yang umumnya diproxy dari frontend ke backend:
+
 - `/auth/*`
 - `/api/auth/*`
 - `/api/style`
 
-Contoh produksi Vercel:
+Contoh:
 
 ```env
 FRONTEND_URL="https://fe-pekapel.vercel.app"
@@ -245,29 +268,3 @@ npm start
 - rate limiting dasar untuk auth dan style endpoint
 - sanitasi error response
 - pembatasan data publik agar email editor terakhir tidak terekspos di snapshot style
-
-## Catatan Deploy
-
-### Deployment lokal atau deployment direct
-
-Kalau frontend memanggil backend secara langsung:
-- `FRONTEND_URL` harus mengarah ke domain frontend
-- `FRONTEND_LOGIN_SUCCESS_URL` dan `FRONTEND_LOGIN_FAILURE_URL` harus mengarah ke frontend
-- `GOOGLE_CALLBACK_URL` harus mengarah ke domain backend
-- frontend harus mengisi `VITE_BACKEND_URL` ke domain backend
-- `AUTH_USE_FRONTEND_PROXY` harus `false`
-
-### Deployment Vercel
-
-Kalau frontend dan backend dideploy terpisah di Vercel:
-- frontend menjadi entry point utama untuk request auth dan style
-- backend tetap menangani session, OAuth, RBAC, dan database
-- `GOOGLE_CALLBACK_URL` diarahkan ke domain frontend dengan path `/api/auth/callback/google`
-- `AUTH_USE_FRONTEND_PROXY` harus `true`
-- frontend perlu rewrite Vercel untuk meneruskan route auth dan style ke backend
-- redirect URI yang sama harus didaftarkan juga di Google Cloud Console
-
-Contoh pola URL Vercel:
-- frontend: `https://fe-pekapel.vercel.app`
-- backend: `https://be-pekapel.vercel.app`
-- callback Google: `https://fe-pekapel.vercel.app/api/auth/callback/google`
