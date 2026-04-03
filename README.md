@@ -126,6 +126,7 @@ Variable penting:
 - `FRONTEND_URLS`
 - `FRONTEND_LOGIN_SUCCESS_URL`
 - `FRONTEND_LOGIN_FAILURE_URL`
+- `AUTH_USE_FRONTEND_PROXY`
 - `BETTER_AUTH_SECRET`
 - `REGISTERED_GOOGLE_ACCOUNTS`
 
@@ -145,6 +146,54 @@ Catatan:
 - akun editor harus didaftarkan di environment
 - akun viewer tidak perlu didaftarkan
 - akun Google yang tidak ada di daftar tetap bisa login, tetapi otomatis menjadi `VIEWER`
+
+## Mode Integrasi Frontend
+
+Backend ini mendukung dua pola integrasi dengan frontend:
+
+### 1. Direct backend
+Mode ini dipakai untuk:
+- development lokal
+- deployment umum selain Vercel proxy flow
+
+Karakteristiknya:
+- frontend memanggil backend langsung
+- callback Google mengarah ke domain backend
+- `VITE_BACKEND_URL` di frontend diisi URL backend
+- `AUTH_USE_FRONTEND_PROXY` diset `false`
+
+Contoh lokal:
+
+```env
+GOOGLE_CALLBACK_URL="http://localhost:4000/api/auth/callback/google"
+AUTH_USE_FRONTEND_PROXY="false"
+```
+
+### 2. Frontend proxy untuk Vercel
+Mode ini dipakai khusus saat frontend dan backend dideploy terpisah di Vercel, tetapi auth ingin tetap diakses melalui domain frontend.
+
+Karakteristiknya:
+- browser mengakses auth dan style melalui domain frontend
+- frontend meneruskan request tertentu ke backend dengan rewrite Vercel
+- callback Google mengarah ke domain frontend pada path `/api/auth/callback/google`
+- backend tetap menjadi server auth dan data utama
+- `AUTH_USE_FRONTEND_PROXY` diset `true`
+
+Route yang umumnya diproxy dari frontend ke backend:
+- `/auth/*`
+- `/api/auth/*`
+- `/api/style`
+
+Contoh produksi Vercel:
+
+```env
+FRONTEND_URL="https://fe-pekapel.vercel.app"
+FRONTEND_URLS="https://fe-pekapel.vercel.app"
+FRONTEND_LOGIN_SUCCESS_URL="https://fe-pekapel.vercel.app/"
+FRONTEND_LOGIN_FAILURE_URL="https://fe-pekapel.vercel.app/"
+GOOGLE_CALLBACK_URL="https://fe-pekapel.vercel.app/api/auth/callback/google"
+AUTH_USE_FRONTEND_PROXY="true"
+```
 
 ## Setup Lokal
 
@@ -199,8 +248,26 @@ npm start
 
 ## Catatan Deploy
 
-Kalau frontend dan backend dipisah deployment:
+### Deployment lokal atau deployment direct
+
+Kalau frontend memanggil backend secara langsung:
 - `FRONTEND_URL` harus mengarah ke domain frontend
 - `FRONTEND_LOGIN_SUCCESS_URL` dan `FRONTEND_LOGIN_FAILURE_URL` harus mengarah ke frontend
 - `GOOGLE_CALLBACK_URL` harus mengarah ke domain backend
+- frontend harus mengisi `VITE_BACKEND_URL` ke domain backend
+- `AUTH_USE_FRONTEND_PROXY` harus `false`
+
+### Deployment Vercel
+
+Kalau frontend dan backend dideploy terpisah di Vercel:
+- frontend menjadi entry point utama untuk request auth dan style
+- backend tetap menangani session, OAuth, RBAC, dan database
+- `GOOGLE_CALLBACK_URL` diarahkan ke domain frontend dengan path `/api/auth/callback/google`
+- `AUTH_USE_FRONTEND_PROXY` harus `true`
+- frontend perlu rewrite Vercel untuk meneruskan route auth dan style ke backend
 - redirect URI yang sama harus didaftarkan juga di Google Cloud Console
+
+Contoh pola URL Vercel:
+- frontend: `https://fe-pekapel.vercel.app`
+- backend: `https://be-pekapel.vercel.app`
+- callback Google: `https://fe-pekapel.vercel.app/api/auth/callback/google`
