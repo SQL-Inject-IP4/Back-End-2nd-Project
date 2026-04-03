@@ -5,6 +5,9 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from "exp
 import { env } from "../config/env.js";
 import { prisma } from "./prisma.js";
 
+const proxyAuthMode = env.AUTH_USE_FRONTEND_PROXY;
+const defaultSameSite = proxyAuthMode ? "lax" : env.NODE_ENV === "production" ? "none" : "lax";
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql"
@@ -13,10 +16,17 @@ export const auth = betterAuth({
   baseURL: env.BACKEND_ORIGIN,
   basePath: "/api/auth",
   trustedOrigins: [env.FRONTEND_URL, ...env.FRONTEND_URLS, env.BACKEND_ORIGIN],
+  account: {
+    storeStateStrategy: proxyAuthMode ? "database" : undefined,
+    // Vercel rewrites can drop the state cookie before it reaches the callback handler.
+    // We keep the random state in the verification table and skip the extra cookie check
+    // only when the app is explicitly configured to use the frontend as the auth proxy.
+    skipStateCookieCheck: proxyAuthMode
+  },
   defaultCookieAttributes: {
     httpOnly: true,
     path: "/",
-    sameSite: env.NODE_ENV === "production" ? "none" : "lax",
+    sameSite: defaultSameSite,
     secure: env.NODE_ENV === "production"
   },
   advanced: {

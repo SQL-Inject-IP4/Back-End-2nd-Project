@@ -1,6 +1,15 @@
 import "dotenv/config";
 import { z } from "zod";
 
+function parseBoolean(value: string | undefined, fallback = false): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -13,6 +22,7 @@ const envSchema = z.object({
   FRONTEND_URLS: z.string().default(""),
   FRONTEND_LOGIN_SUCCESS_URL: z.string().url().default("http://localhost:5173/"),
   FRONTEND_LOGIN_FAILURE_URL: z.string().url().default("http://localhost:5173/"),
+  AUTH_USE_FRONTEND_PROXY: z.string().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   JWT_SECRET: z.string().min(32).optional()
 });
@@ -27,6 +37,7 @@ if (!authSecret) {
 export const env = {
   ...parsedEnv,
   AUTH_SECRET: authSecret,
+  AUTH_USE_FRONTEND_PROXY: parseBoolean(parsedEnv.AUTH_USE_FRONTEND_PROXY),
   BACKEND_ORIGIN: new URL(parsedEnv.GOOGLE_CALLBACK_URL).origin,
   REGISTERED_GOOGLE_ACCOUNTS: parsedEnv.REGISTERED_GOOGLE_ACCOUNTS.split(",")
     .map((entry) => entry.trim())
