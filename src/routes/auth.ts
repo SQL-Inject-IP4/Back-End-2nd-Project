@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { env } from "../config/env.js";
-import { applyBetterAuthHeaders, auth, getRequestHeaders, getSessionFromRequest, sendBetterAuthResponse } from "../lib/better-auth.js";
-import { prisma } from "../lib/prisma.js";
-import { syncUserRole } from "../lib/rbac.js";
+import { applyBetterAuthHeaders, auth, getRequestHeaders, sendBetterAuthResponse } from "../lib/better-auth.js";
+import { attachAuthUser } from "../middleware/authenticate.js";
 import { createRateLimit } from "../middleware/security.js";
 
 export const authRouter = Router();
@@ -61,7 +60,7 @@ authRouter.post("/logout", authFlowRateLimit, async (req, res, next) => {
   }
 });
 
-authRouter.get("/me", authReadRateLimit, async (req, res, next) => {
+authRouter.get("/me", authReadRateLimit, attachAuthUser, async (req, res, next) => {
   try {
     if (!req.authUser) {
       res.json({
@@ -71,35 +70,14 @@ authRouter.get("/me", authReadRateLimit, async (req, res, next) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.authUser.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        image: true,
-        role: true
-      }
-    });
-
-    if (!user) {
-      res.json({
-        authenticated: false,
-        user: null
-      });
-      return;
-    }
-
-    const resolvedRole = await syncUserRole(user.id, user.email);
-
     res.json({
       authenticated: true,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name ?? null,
-        avatarUrl: user.image ?? null,
-        role: resolvedRole
+        id: req.authUser.sub,
+        email: req.authUser.email,
+        name: req.authUser.name,
+        avatarUrl: req.authUser.avatarUrl,
+        role: req.authUser.role
       }
     });
   } catch (error) {

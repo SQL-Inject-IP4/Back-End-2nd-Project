@@ -3,7 +3,6 @@ import cors from "cors";
 import express from "express";
 import { env } from "./config/env.js";
 import { betterAuthHandler } from "./lib/better-auth.js";
-import { attachAuthUser } from "./middleware/authenticate.js";
 import { createRateLimit, setSecurityHeaders } from "./middleware/security.js";
 import { authRouter } from "./routes/auth.js";
 import { styleRouter } from "./routes/style.js";
@@ -58,7 +57,6 @@ app.use(setSecurityHeaders);
 app.all(/^\/api\/auth(?:\/.*)?$/, internalAuthRateLimit, (req, res) => betterAuthHandler(req, res));
 app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser());
-app.use(attachAuthUser);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

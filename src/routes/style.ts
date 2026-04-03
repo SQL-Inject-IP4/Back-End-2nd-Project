@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireEditor } from "../middleware/authenticate.js";
+import { attachAuthUser, requireEditor } from "../middleware/authenticate.js";
 import { createRateLimit } from "../middleware/security.js";
 import { prisma } from "../lib/prisma.js";
 
@@ -63,7 +63,7 @@ styleRouter.get("/", styleReadRateLimit, async (_req, res, next) => {
   }
 });
 
-styleRouter.patch("/", styleWriteRateLimit, requireEditor, async (req, res, next) => {
+styleRouter.patch("/", styleWriteRateLimit, attachAuthUser, requireEditor, async (req, res, next) => {
   try {
     const parsedBody = updateStyleSchema.safeParse(req.body);
 

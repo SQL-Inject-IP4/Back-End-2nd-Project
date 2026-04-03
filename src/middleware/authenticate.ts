@@ -18,6 +18,7 @@ export async function attachAuthUser(req: Request, res: Response, next: NextFunc
       sub: session.user.id,
       email: session.user.email,
       name: session.user.name ?? null,
+      avatarUrl: session.user.image ?? null,
       role: resolvedRole
     };
     next();

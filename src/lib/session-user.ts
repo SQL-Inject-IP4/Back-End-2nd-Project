@@ -5,4 +5,5 @@ export type AuthenticatedUser = {
   email: string;
   role: UserRole;
   name: string | null;
+  avatarUrl: string | null;
 };
